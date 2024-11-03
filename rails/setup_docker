@@ -1,0 +1,89 @@
+#!/bin/bash
+touch Gemfile
+
+cat <<TEXT > Gemfile
+# frozen_string_literal: true
+
+source "https://rubygems.org"
+
+gem "rails"
+TEXT
+
+touch Gemfile.lock
+
+touch docker-compose.yml
+
+cat <<TEXT > docker-compose.yml
+services:
+  db:
+    image: mysql:8.0
+    command: --default-authentication-plugin=mysql_native_password
+    environment:
+      MYSQL_ROOT_PASSWORD: password
+      MYSQL_DATABASE: db
+    volumes:
+      - db_data:/var/lib/mysql
+    ports:
+      - 3306:3306
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: bash -c "rm -f tmp/pids/server.pid && bundle exec rails s -b 0.0.0.0"
+    volumes:
+      - .:/app
+    depends_on:
+      - db
+    ports:
+      - 3000:3000
+volumes:
+  db_data:
+    driver: local
+TEXT
+
+touch Dockerfile
+
+cat <<TEXT > Dockerfile
+FROM ruby:3.3.5
+
+WORKDIR /app
+
+COPY Gemfile Gemfile.lock ./
+
+RUN bundle install
+
+COPY . .
+
+COPY entrypoint.sh /usr/bin/
+RUN chmod +x /usr/bin/entrypoint.sh
+ENTRYPOINT ["entrypoint.sh"]
+
+CMD ["rails", "server", "-b", "0.0.0.0"]
+TEXT
+
+touch entrypoint.sh
+
+cat <<TEXT > entrypoint.sh
+#!/bin/bash
+set -e
+
+rm -f /app/tmp/pids/server.pid
+
+bundle install
+
+exec "\$@"
+TEXT
+
+docker-compose build
+
+docker-compose run --rm app \
+  bash -c "bundle install && bundle exec rails new . --database=mysql --force --skip-docker --skip-test --skip-ci"
+
+# setting database.yml
+sed -i '' 's/localhost/db/g' config/database.yml
+sed -i '' 's/password:/password: password/g' config/database.yml
+
+docker-compose up -d
+
+# if rails application is started, create database
+# docker-compose exec app bundle exec rails db:create
