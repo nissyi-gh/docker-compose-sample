@@ -87,7 +87,7 @@ docker-compose run --rm app \
   bash -c "bundle install && bundle exec rails new . --database=mysql --force --skip-docker --skip-test --skip-ci"
 
 # setting database.yml
-sed -i '' 's/localhost/db/g' config/database.yml
+sed -i '' 's/host:.*/host: db/g' config/database.yml
 sed -i '' 's/password:/password: password/g' config/database.yml
 
 docker-compose up -d
