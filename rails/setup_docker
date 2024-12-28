@@ -1,4 +1,7 @@
 #!/bin/bash
+
+# このスクリプトをプロジェクトディレクトリのルートに配置して実行すると、MySQL/Rails/Redisの環境が立ち上がります
+
 touch Gemfile
 
 cat <<TEXT > Gemfile
