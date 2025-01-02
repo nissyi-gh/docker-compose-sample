@@ -1,0 +1,93 @@
+#!/bin/bash
+
+touch Gemfile
+
+cat <<TEXT > Gemfile
+# frozen_string_literal: true
+
+source "https://rubygems.org"
+
+gem 'rails', '~> 7.2.2.1'
+TEXT
+
+touch Gemfile.lock
+
+touch docker-compose.yml
+
+cat <<TEXT > docker-compose.yml
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: bash -c "rm -f tmp/pids/server.pid && bundle exec rails s -b 0.0.0.0"
+    volumes:
+      - .:/app
+    ports:
+      - 3000:3000
+  redis:
+    image: redis:latest
+    ports:
+      - 6379:6379
+TEXT
+
+touch Dockerfile
+
+cat <<TEXT > Dockerfile
+FROM ruby:3.3.5
+
+WORKDIR /app
+
+COPY Gemfile Gemfile.lock ./
+
+RUN bundle install
+
+COPY . .
+
+COPY entrypoint.sh /usr/bin/
+RUN chmod +x /usr/bin/entrypoint.sh
+ENTRYPOINT ["entrypoint.sh"]
+
+CMD ["rails", "server", "-b", "0.0.0.0"]
+TEXT
+
+touch entrypoint.sh
+
+cat <<TEXT > entrypoint.sh
+#!/bin/bash
+set -e
+
+rm -f /app/tmp/pids/server.pid
+
+bundle install
+
+exec "\$@"
+TEXT
+
+docker-compose build
+
+docker-compose run --rm app bash -c "\
+  bundle install && \
+  bundle exec rails _7.2.2.1_ new . \
+    --database=sqlite3 \
+    --force \
+    --skip-docker \
+    --skip-test \
+    --skip-action-mailer \
+    --skip-action-mailbox \
+    --skip-action-text \
+    --skip-active-job \
+    --skip-active-storage \
+    --skip-ci \
+    --skip-action-cable \
+    --skip-jbuilder"
+
+docker-compose up -d
+
+# install redis gem
+sed -i '' 's/# gem "redis".*/gem "redis"/g' Gemfile
+
+docker-compose exec app bundle install
+
+# if rails application is started, create database
+# docker-compose exec app bundle exec rails db:create
